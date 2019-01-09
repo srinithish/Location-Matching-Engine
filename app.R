@@ -1,0 +1,140 @@
+options(shiny.maxRequestSize = 15*1024^2)
+
+##UI for Comparision Tool
+source("InstallRequiredPackages.R")
+library(shiny)
+library(leaflet)
+
+##source tab files relavant to UI here
+source("AppControlTab.R")
+source("AppLocationDetailsTab.R")
+source("AppSummaryTab.R")
+
+# Define UI for data upload app ----
+ui <- fluidPage(
+  
+  # App title ----
+  titlePanel("YoY or Pre-Post Comparision Tool"),
+ 
+  # Sidebar layout with input and output definitions ----
+  sidebarLayout(
+
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+      
+                
+      
+                # Input: Select a prequote file ----
+                fileInput("PreFileID_Inp", "Choose MSTR export Pre File (.xlsx)",
+                          multiple = FALSE,
+                          accept = c(".xlsx")),
+                
+                
+                # Input: Select a prequote file ----
+                fileInput("PostFileID_Inp", "Choose MSTR export Post File (.xlsx)",
+                          multiple = FALSE,
+                          accept = c(".xlsx")),
+
+                
+                ##----
+                tags$hr(),
+          
+                h5 ("Version : Beta"),
+                h5  ("Dev : Nithish"),
+                
+                tags$hr()
+
+      ),
+
+    # Main panel for other inputs
+    mainPanel(
+
+             tabsetPanel(     ## Match percentage slider
+                  
+                  ControlTab,
+                  LocationDetailsTab,
+                  SummaryTab
+                  
+             )
+      )
+
+  )
+)
+
+
+server <- function(input, output) {
+  
+  
+          runandmessage <- eventReactive(input$Run_Inp, ({
+            
+            
+            
+            ## all the global Control variables  set them here
+            
+            assign("MSTRExcelWbPathPre",input$PreFileID_Inp$datapath,envir = .GlobalEnv)
+            assign("MSTRExcelWbPathPost",input$PostFileID_Inp$datapath,envir =.GlobalEnv)
+            assign("MatchThreshold",input$MatchPctThreshhold_Inp,envir =.GlobalEnv)
+            assign("OutputDirectory",gsub("\\\\","/",input$FolderPath_Inp),envir = .GlobalEnv)
+            
+            ###source all the scripts here
+        
+            withProgress( message = "Status:", value = 0,{
+              
+              incProgress(1/6, detail = "Running Location Matching Engine")
+              source("LocationMatchingAlgo.R")
+              incProgress(1/6, detail = "Running Location Comparision")
+              source("LocationComparision.R")
+              incProgress(1/6, detail = "Reading Policy terms")
+              source("ReadingFromExcel.R")
+              incProgress(1/6, detail = "Comparing Policies")
+              source("PolicyLevelComparision.R")
+              source("AllGraphics.R")
+              incProgress(1/6, detail = "Generating Report")
+              source("GenerateReport.R")
+              }
+            )
+            
+            ##place all the ouputs here with the IDs
+            output$LocationComparisionPlot = LocationComparisionPlot_Out ##refer Location comparision
+            output$AIGParticipationPlot = AIGParticipationPlot_Out ##refer AllGraphics.R
+            output$PolicyLimitPlot = PolicyLimitPlot_Out
+            output$NoOfLocationsPlot = NoOfLocationsPlot_Out
+            paste0("Ran successfully and generated the report")
+            
+            
+            
+            
+            
+            
+            
+            
+              })
+          )
+  
+      
+          
+  output$message <- renderText ({
+    
+    # execute reactive expression defined above
+    runandmessage()
+   
+    
+  })
+  
+  
+  output$finalReportDownload.xlsx =  downloadHandler(
+                                filename = function() {
+                                  return("FinalOutput.xlsx")
+                                },
+                                content = function(outputFile) {
+                                  # file.copy("FinalReport.xlsx", outputFile)
+                                  saveWorkbook(FinalReportWb,file = outputFile,overwrite = TRUE)
+                                }
+                                
+                                )
+    
+
+}
+
+# Create Shiny app ----
+shinyApp(ui, server)
